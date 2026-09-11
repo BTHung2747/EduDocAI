@@ -19,6 +19,16 @@ function readableError(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function classifyTitle(title?: string | null): 'chapter' | 'section' | 'figure' | 'citation' | 'normal' {
+  if (!title) return 'normal';
+  const t = title.trim();
+  if (/chương|phần|chapter|part/i.test(t) || (t.length > 5 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))) return 'chapter';
+  if (/^(\d+(\.\d+)*\.?|[IVXLCDM]+\.?)\s/i.test(t)) return 'section';
+  if (/hình|bảng|figure|table|sơ đồ|biểu đồ/i.test(t)) return 'figure';
+  if (/lưu ý|ghi chú|chú ý|định nghĩa|khái niệm|trích dẫn|>|note/i.test(t)) return 'citation';
+  return 'section';
+}
+
 function AnalysisState({ status, message }: { status: string; message?: string }) {
   const text = status === 'NOT_GENERATED' ? 'Chưa có phân tích cho tài liệu này.' : status === 'QUEUED' ? 'Phân tích đang chờ xử lý.' : status === 'RUNNING' ? 'AI đang đọc tài liệu.' : message || 'Không thể tải kết quả phân tích.';
   return <div className="flex min-h-44 flex-col items-center justify-center px-5 text-center"><Icon name={status === 'RUNNING' || status === 'QUEUED' ? 'hourglass_top' : 'auto_awesome'} className="mb-2 h-[30px] w-[30px] text-text-secondary" /><p className="text-sm font-semibold text-text">{text}</p><p className="mt-1 text-xs text-text-secondary">Kết quả chỉ được tạo bởi tác vụ AI nền, không tạo trong khi bạn đang xem.</p></div>;
@@ -217,26 +227,88 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
               {showFind && <label className="relative min-w-[150px] flex-1"><FigmaDocumentIcon name="detail-find" className="pointer-events-none absolute left-2 top-1/2 h-[15px] w-[15px] -translate-y-1/2 object-contain" /><input autoFocus value={find} onChange={(event) => setFind(event.target.value)} placeholder="Tìm trong tài liệu" className="h-8 w-full rounded-md border border-border pl-8 pr-2 text-xs outline-none focus:border-primary" /></label>}
               <div className="ml-auto flex items-center gap-1"><button type="button" aria-label="Thu nhỏ" onClick={() => setZoom((value) => Math.max(75, value - 10))} className={viewerControlClass}><FigmaDocumentIcon name="detail-minus" className="h-3 w-3 object-contain" /></button><span className="w-10 text-center text-xs font-medium text-text-secondary">{zoom}%</span><button type="button" aria-label="Phóng to" onClick={() => setZoom((value) => Math.min(150, value + 10))} className={viewerControlClass}><Icon name="add" className="h-[18px] w-[18px]" /></button><span className="mx-1 h-4 w-px bg-border" /><button type="button" aria-label="Tìm trong tài liệu" aria-pressed={showFind} onClick={() => setShowFind((value) => !value)} className={`${viewerControlClass} ${showFind ? 'bg-primary-soft text-primary' : ''}`}><FigmaDocumentIcon name="detail-find" className="h-[15px] w-[15px] object-contain" /></button><button type="button" aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'} aria-pressed={isFullscreen} onClick={toggleViewerFullscreen} className={`${viewerControlClass} ${isFullscreen ? 'bg-primary-soft text-primary' : ''}`}><FigmaDocumentIcon name="detail-fullscreen" className="h-[15px] w-[15px] object-contain" /></button></div>
             </div>
-            <div className="min-h-[620px] bg-white lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-              <div style={{ fontSize: `${zoom}%` }} className="mx-auto max-w-[760px] px-8 py-8">
+            <div className="min-h-[620px] select-text bg-white lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              <div style={{ fontSize: `${zoom}%` }} className="mx-auto flex max-w-[620px] flex-col px-8 py-8">
                 {contentError ? (
                   <div className="rounded-lg bg-danger-soft p-4 text-sm text-danger">{contentError}</div>
                 ) : visibleSections.length === 0 ? (
                   <div className="flex min-h-96 items-center justify-center text-center text-sm text-text-secondary">Không có nội dung khớp với trang hiện tại.</div>
                 ) : (
-                  visibleSections.map((section) => (
-                    <article key={section.id} className="mb-8 last:mb-0">
-                      <div className="mb-3 flex items-baseline justify-between gap-4 border-b border-border pb-2">
-                        <p className="text-[10px] font-medium uppercase tracking-widest text-text-secondary">{section.title || 'Nội dung tài liệu'}</p>
+                  visibleSections.map((section) => {
+                    const titleType = classifyTitle(section.title);
+                    
+                    const paragraphs = section.contentText
+                      .split(/\n\s*\n/)
+                      .map((p) => p.trim())
+                      .filter(Boolean);
+                    
+                    const contentParas = paragraphs.length > 0 ? paragraphs : [section.contentText];
+
+                    return (
+                      <article key={section.id} className="mb-8 flex flex-col gap-5 last:mb-0">
+                        {/* Page Header Stamp */}
                         {section.pageStart && (
-                          <span className="shrink-0 text-[10px] font-medium uppercase tracking-widest text-text-secondary">
-                            Trang {section.pageStart}{section.pageEnd && section.pageEnd !== section.pageStart ? `–${section.pageEnd}` : ''}
-                          </span>
+                          <div className="flex items-center justify-between border-b border-[#E1E5EE] pb-2 text-[12px] font-medium uppercase tracking-wider text-[#687188]">
+                            <span className="max-w-[420px] truncate">{document.displayName}</span>
+                            <span className="shrink-0">TRANG {section.pageStart}</span>
+                          </div>
                         )}
-                      </div>
-                      <p className="whitespace-pre-wrap text-sm leading-7 text-text">{section.contentText}</p>
-                    </article>
-                  ))
+
+                        {/* Chapter title */}
+                        {titleType === 'chapter' && (
+                          <div className="pt-2">
+                            <h2 className="text-[18px] font-medium uppercase leading-snug tracking-tight text-[#192033]">
+                              {section.title}
+                            </h2>
+                          </div>
+                        )}
+
+                        {/* Section/Normal Content Block */}
+                        {(titleType === 'section' || titleType === 'normal' || titleType === 'chapter') && (
+                          <div className="flex flex-col gap-2">
+                            {titleType === 'section' && section.title && (
+                              <h3 className="text-[14px] font-medium text-[#192033]">
+                                {section.title}
+                              </h3>
+                            )}
+                            {contentParas.map((para, i) => (
+                              <p key={i} className="whitespace-pre-line text-justify text-[14px] font-normal leading-relaxed text-[#2C344E]">
+                                {para}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Figure block */}
+                        {titleType === 'figure' && (
+                          <div className="my-4 flex flex-col items-center rounded-[10px] border border-[#E1E5EE] bg-[#FAFBFD] p-4">
+                            <span className="mb-3 text-center text-[12px] font-medium uppercase tracking-wider text-[#687188]">
+                              {section.title}
+                            </span>
+                            <p className="whitespace-pre-line text-center text-[12px] font-normal leading-relaxed text-[#687188]">
+                              {section.contentText}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Highlight citation */}
+                        {titleType === 'citation' && (
+                          <div className="flex flex-col gap-2">
+                            {section.title && (
+                              <h3 className="text-[14px] font-medium text-[#192033]">
+                                {section.title}
+                              </h3>
+                            )}
+                            <div className="rounded-[8px] border-l-4 border-[#5b5ce2] bg-[#5b5ce2]/15 p-3">
+                              <p className="whitespace-pre-line text-[14px] font-normal leading-relaxed text-[#192033]">
+                                {section.contentText}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })
                 )}
               </div>
             </div>
