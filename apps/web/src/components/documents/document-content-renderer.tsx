@@ -108,11 +108,18 @@ export function DocumentContentRenderer({
       {sections.map((section) => {
         const type = classifyTitle(section.title);
 
-        const paragraphs = section.contentText
-          .split(/\n\s*\n/)
+        // Split by single newline because PDF parsers often output single newlines.
+        // Heuristic: Inject newline before common section markers (e.g. ' 1. ', ' I. ') 
+        // if they are preceded by a space and followed by a capital letter,
+        // because the backend often merges headings and content into a single monolithic string.
+        let text = section.contentText || '';
+        text = text.replace(/ (\d+(\.\d+)*\.|[IVXLCDM]{1,5}\.) (?=[A-ZÀ-Ỹ])/g, '\n$1 ');
+
+        const paragraphs = text
+          .split('\n')
           .map((p) => p.trim())
           .filter(Boolean);
-        const contentParas = paragraphs.length > 0 ? paragraphs : [section.contentText];
+        const contentParas = paragraphs.length > 0 ? paragraphs : [text];
 
         return (
           <article
