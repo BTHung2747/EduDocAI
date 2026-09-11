@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: edudocs-postgres
+    environment:
+      POSTGRES_DB: edudocs
+      POSTGRES_USER: edudocs
+      POSTGRES_PASSWORD: edudocs
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U edudocs -d edudocs']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

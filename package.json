@@ -1,0 +1,24 @@
+{
+  "name": "edudocs-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "build": "corepack pnpm -r --if-present build",
+    "dev": "corepack pnpm --parallel --stream -r --if-present dev",
+    "lint": "corepack pnpm -r --if-present lint",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "corepack pnpm -r --if-present test",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "db:generate": "corepack pnpm --filter @edudocs/api prisma:generate",
+    "db:migrate": "corepack pnpm --filter @edudocs/api prisma:migrate"
+    ,"reindex": "corepack pnpm --filter @edudocs/api reindex"
+  },
+  "devDependencies": {
+    "@prisma/client": "6.16.1",
+    "prettier": "3.6.2",
+    "prisma": "6.16.1",
+    "typescript": "5.9.2"
+  }
+}

@@ -1,0 +1,2 @@
+import { parseReindexArgs } from './reindex';
+describe('reindex CLI arguments',()=>{it('parses a document id',()=>expect(parseReindexArgs(['--document-id','id'])).toEqual({documentId:'id',missing:false,dryRun:false}));it('parses missing and dry-run',()=>expect(parseReindexArgs(['--missing','--dry-run'])).toEqual({documentId:undefined,missing:true,dryRun:true}));it('rejects no mode',()=>expect(()=>parseReindexArgs([])).toThrow());it('rejects both modes',()=>expect(()=>parseReindexArgs(['--missing','--document-id','id'])).toThrow());});

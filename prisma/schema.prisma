@@ -1,0 +1,429 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../apps/api/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+}
+
+enum AiJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum DocumentStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum SubjectAssignmentSource {
+  MANUAL
+  AI
+}
+
+enum DocumentAnalysisStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum QuestionSourceType {
+  AI
+  IMPORT
+  MANUAL
+}
+
+enum QuestionStatus {
+  DRAFT
+  APPROVED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionImportStatus {
+  PREVIEW
+  COMMITTED
+}
+
+enum TestStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+model User {
+  id                  String               @id @default(uuid()) @db.Uuid
+  email               String               @unique
+  passwordHash        String
+  displayName         String
+  avatarUrl           String?
+  role                UserRole             @default(USER)
+  status              UserStatus           @default(ACTIVE)
+  refreshSessions     RefreshSession[]
+  passwordResetTokens PasswordResetToken[]
+  aiJobs              AiJob[]
+  subjects            Subject[]
+  documents           Document[]
+  questions           Question[]
+  questionImports     QuestionImport[]
+  tests               Test[]
+  attempts            Attempt[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model Subject {
+  id          String     @id @default(uuid()) @db.Uuid
+  ownerId     String     @db.Uuid
+  name        String
+  description String?
+  deletedAt   DateTime?
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  documents   Document[]
+  questions   Question[]
+  questionImports QuestionImport[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([ownerId, deletedAt])
+}
+
+model Document {
+  id           String          @id @default(uuid()) @db.Uuid
+  ownerId      String          @db.Uuid
+  subjectId    String?         @db.Uuid
+  subjectAssignmentSource SubjectAssignmentSource?
+  subjectConfidence Float?
+  subjectAssignedAt DateTime?
+  displayName  String
+  originalName String
+  mimeType     String
+  extension    String
+  sizeBytes    Int
+  storageKey   String          @unique
+  checksum     String
+  pageCount    Int?
+  status       DocumentStatus  @default(PROCESSING)
+  errorCode    String?
+  errorMessage String?
+  deletedAt    DateTime?
+  owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject      Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  sections     DocumentSection[]
+  chunks       DocumentChunk[]
+  aiJobs       AiJob[]
+  analysis     DocumentAnalysis?
+  sourceQuestions Question[]       @relation("QuestionSourceDocument")
+  questionCitations QuestionCitation[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([ownerId, deletedAt, createdAt])
+  @@index([ownerId, checksum])
+  @@index([subjectId])
+}
+
+model DocumentAnalysis {
+  id            String                 @id @default(uuid()) @db.Uuid
+  documentId    String                 @unique @db.Uuid
+  status        DocumentAnalysisStatus @default(QUEUED)
+  summary       Json?
+  topicsJson    Json?
+  provider      String?
+  model         String?
+  promptVersion String                 @default("m2b-2a-v1")
+  errorCode     String?
+  errorMessage  String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  document      Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+}
+
+model DocumentChunk {
+  id          String   @id @default(uuid()) @db.Uuid
+  documentId  String   @db.Uuid
+  sectionId   String?  @db.Uuid
+  chunkIndex  Int
+  contentText String
+  pageStart   Int?
+  pageEnd     Int?
+  embedding   Float[]
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  section     DocumentSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  questionCitations QuestionCitation[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId, sectionId])
+}
+
+model DocumentSection {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @db.Uuid
+  title      String?
+  orderIndex Int
+  pageStart  Int?
+  pageEnd    Int?
+  contentText String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunks     DocumentChunk[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([documentId, orderIndex])
+  @@index([documentId, pageStart])
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+}
+
+model AiJob {
+  id          String      @id @default(uuid()) @db.Uuid
+  ownerId     String      @db.Uuid
+  type        String
+  status      AiJobStatus @default(QUEUED)
+  provider    String?
+  model       String?
+  attempts    Int         @default(0)
+  inputJson   Json
+  resultJson  Json?
+  errorCode   String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  tokenUsage  Json?
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  documentId  String?     @db.Uuid
+  document    Document?   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([status, createdAt])
+  @@index([ownerId, createdAt])
+  @@index([documentId, createdAt])
+}
+
+model Question {
+  id               String             @id @default(uuid()) @db.Uuid
+  ownerId          String             @db.Uuid
+  subjectId        String?            @db.Uuid
+  sourceType       QuestionSourceType
+  status           QuestionStatus     @default(DRAFT)
+  text             String
+  difficulty       Difficulty
+  explanation      String
+  correctOptionKey String
+  sourceDocumentId String?            @db.Uuid
+  deletedAt        DateTime?
+  owner            User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject          Subject?           @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  sourceDocument   Document?          @relation("QuestionSourceDocument", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  options          QuestionOption[]
+  citations        QuestionCitation[]
+  testQuestions    TestQuestion[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([ownerId, deletedAt, status, createdAt])
+  @@index([ownerId, subjectId])
+  @@index([sourceDocumentId])
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  key        String
+  text       String
+  orderIndex Int
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([questionId, key])
+  @@unique([questionId, orderIndex])
+}
+
+model QuestionCitation {
+  id         String        @id @default(uuid()) @db.Uuid
+  questionId String        @db.Uuid
+  documentId String        @db.Uuid
+  chunkId    String        @db.Uuid
+  pageStart  Int?
+  pageEnd    Int?
+  quote      String
+  question   Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  document   Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunk      DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([documentId, chunkId])
+  @@index([questionId])
+}
+
+model QuestionImport {
+  id           String               @id @default(uuid()) @db.Uuid
+  ownerId      String               @db.Uuid
+  subjectId    String?              @db.Uuid
+  fileName     String
+  status       QuestionImportStatus @default(PREVIEW)
+  totalCount   Int                  @default(0)
+  validCount   Int                  @default(0)
+  invalidCount Int                  @default(0)
+  errorsJson   Json?
+  owner        User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject      Subject?             @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  items        QuestionImportItem[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([ownerId, status, createdAt])
+}
+
+model QuestionImportItem {
+  id         String         @id @default(uuid()) @db.Uuid
+  importId   String         @db.Uuid
+  orderIndex Int
+  text       String?
+  optionsJson Json?
+  correctOptionKey String?
+  explanation String?
+  difficulty Difficulty     @default(MEDIUM)
+  isValid    Boolean        @default(false)
+  errorsJson Json?
+  questionImport QuestionImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([importId, orderIndex])
+  @@index([importId, isValid])
+}
+
+model Test {
+  id               String     @id @default(uuid()) @db.Uuid
+  ownerId          String     @db.Uuid
+  title            String
+  description      String?
+  durationMinutes  Int?
+  shuffleQuestions Boolean    @default(false)
+  shuffleOptions   Boolean    @default(false)
+  showAnswers      Boolean    @default(false)
+  status           TestStatus @default(DRAFT)
+  publishedAt      DateTime?
+  deletedAt        DateTime?
+  owner            User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  questions        TestQuestion[]
+  attempts         Attempt[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([ownerId, deletedAt, status, createdAt])
+}
+
+model TestQuestion {
+  id           String   @id @default(uuid()) @db.Uuid
+  testId       String   @db.Uuid
+  questionId   String   @db.Uuid
+  orderIndex   Int
+  points       Int      @default(1)
+  snapshotJson Json?
+  test         Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  attemptAnswers AttemptAnswer[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([testId, questionId])
+  @@unique([testId, orderIndex])
+  @@index([questionId])
+}
+
+model Attempt {
+  id               String        @id @default(uuid()) @db.Uuid
+  testId           String        @db.Uuid
+  userId           String        @db.Uuid
+  status           AttemptStatus @default(IN_PROGRESS)
+  startedAt        DateTime      @default(now())
+  expiresAt        DateTime?
+  submittedAt      DateTime?
+  score            Int?
+  totalPoints      Int?
+  totalQuestionCount Int?
+  correctCount     Int?
+  incorrectCount   Int?
+  unansweredCount  Int?
+  test             Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers          AttemptAnswer[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([testId, status])
+}
+
+model AttemptAnswer {
+  id               String       @id @default(uuid()) @db.Uuid
+  attemptId        String       @db.Uuid
+  testQuestionId   String       @db.Uuid
+  selectedOptionKey String?
+  markedForReview  Boolean      @default(false)
+  isCorrect        Boolean?
+  answeredAt       DateTime?
+  attempt          Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion     TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([attemptId, testQuestionId])
+  @@index([testQuestionId])
+}
