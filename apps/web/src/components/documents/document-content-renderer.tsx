@@ -10,17 +10,17 @@ export function classifyTitle(title?: string | null): SectionType {
   const t = title.trim();
   // Tiêu đề dạng "Trang X" do parser PDF sinh ra → không render thành heading
   if (/^trang\s*\d+$/i.test(t)) return 'normal';
-  // Tiêu đề chương: bắt đầu bằng "Chương/Phần/Chapter/Part"
-  if (/chương|phần|chapter|part/i.test(t)) return 'chapter';
-  // Chữ hoa toàn bộ NGẮN (≤ 80 ký tự) → chapter heading (tên chương trên cover page)
-  if (t.length > 4 && t.length <= 80 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t)) return 'chapter';
-  // Tiêu đề mục: bắt đầu bằng số thứ tự (1., 1.1., I., IV.…)
-  if (/^(\d+(\.\d+)*\.?|[IVXLCDM]+\.?)\s/i.test(t)) return 'section';
+  // Tiêu đề chương: BẮt ĐẦU bằng chương/phần/chapter/part VÀ phải đủ ngắn (≤ 100 ký tự)
+  if (/^(chương|phần|chapter|part)\s/i.test(t) && t.length <= 100) return 'chapter';
+  // Chữ hoa toàn bộ và rất ngắn (≤ 60 ký tự) → chapter heading (tên chương trên cover)
+  if (t.length > 4 && t.length <= 60 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t)) return 'chapter';
+  // Tiêu đề mục: bắt đầu bằng số thứ tự (1., 1.1., I., IV.…) và ngắn (≤ 120 ký tự)
+  if (/^(\d+(\.\d+)*\.?|[IVXLCDM]+\.?)\s/i.test(t) && t.length <= 120) return 'section';
   // Hình / biểu đồ / bảng
   if (/hình|bảng|figure|table|sơ đồ|biểu đồ/i.test(t)) return 'figure';
   // Khung chú thích / lưu ý
   if (/lưu ý|ghi chú|chú ý|định nghĩa|khái niệm|trích dẫn|note/i.test(t)) return 'citation';
-  return 'section';
+  return 'normal';
 }
 
 // ─── Heuristic paragraph scanner ───────────────────────────────────────────────
@@ -29,10 +29,10 @@ function renderParagraph(para: string, i: number) {
   const t = para.trim();
   if (!t) return null;
 
-  // Dòng toàn chữ hoa NGẮN (≤ 80 ký tự) → Chapter heading (V2 §3.2 Section title)
+  // Dòng toàn chữ hoa VÀ NGẮN (≤ 60 ký tự) hoặc bắt đầu bằng chương/phần và ngắn (≤ 100 ký tự)
   if (
-    /^(chương|phần|chapter|part)\s/i.test(t) ||
-    (t.length > 4 && t.length <= 80 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))
+    (/^(chương|phần|chapter|part)\s/i.test(t) && t.length <= 100) ||
+    (t.length > 4 && t.length <= 60 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))
   ) {
     return (
       <h2
