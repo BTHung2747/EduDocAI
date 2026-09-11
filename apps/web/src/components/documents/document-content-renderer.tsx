@@ -10,11 +10,10 @@ export function classifyTitle(title?: string | null): SectionType {
   const t = title.trim();
   // Tiêu đề dạng "Trang X" do parser PDF sinh ra → không render thành heading
   if (/^trang\s*\d+$/i.test(t)) return 'normal';
-  // Tiêu đề chương: bắt đầu bằng "Chương/Phần/Chapter/Part" HOẶC viết hoa toàn bộ
-  if (
-    /chương|phần|chapter|part/i.test(t) ||
-    (t.length > 5 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))
-  ) return 'chapter';
+  // Tiêu đề chương: bắt đầu bằng "Chương/Phần/Chapter/Part"
+  if (/chương|phần|chapter|part/i.test(t)) return 'chapter';
+  // Chữ hoa toàn bộ NGẮN (≤ 80 ký tự) → chapter heading (tên chương trên cover page)
+  if (t.length > 4 && t.length <= 80 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t)) return 'chapter';
   // Tiêu đề mục: bắt đầu bằng số thứ tự (1., 1.1., I., IV.…)
   if (/^(\d+(\.\d+)*\.?|[IVXLCDM]+\.?)\s/i.test(t)) return 'section';
   // Hình / biểu đồ / bảng
@@ -30,10 +29,10 @@ function renderParagraph(para: string, i: number) {
   const t = para.trim();
   if (!t) return null;
 
-  // Dòng toàn chữ hoa ngắn → Chapter heading (V2 §3.2 Page title 28/36)
+  // Dòng toàn chữ hoa NGẮN (≤ 80 ký tự) → Chapter heading (V2 §3.2 Section title)
   if (
     /^(chương|phần|chapter|part)\s/i.test(t) ||
-    (t.length > 5 && t.length < 150 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))
+    (t.length > 4 && t.length <= 80 && t === t.toUpperCase() && /[A-ZÀ-Ỹ]/.test(t))
   ) {
     return (
       <h2
